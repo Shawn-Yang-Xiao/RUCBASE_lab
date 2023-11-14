@@ -1,5 +1,7 @@
 #include "lru_replacer.h"
 
+// #include <list>
+
 LRUReplacer::LRUReplacer(size_t num_pages) { max_size_ = num_pages; }
 
 LRUReplacer::~LRUReplacer() = default;
@@ -18,6 +20,11 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
     //  利用lru_replacer中的LRUlist_,LRUHash_实现LRU策略
     //  选择合适的frame指定为淘汰页面,赋值给*frame_id
 
+    if (LRUlist_.empty()) return false;
+    frame_id_t ans = LRUlist_.front();
+    LRUlist_.pop_front();
+    *frame_id = ans;
+
     return true;
 }
 
@@ -30,6 +37,16 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
     // Todo:
     // 固定指定id的frame
     // 在数据结构中移除该frame
+    std::list<frame_id_t>::iterator iter;
+    for (iter = LRUlist_.begin(); iter != LRUlist_.end();) {
+        if (*iter == frame_id) {
+            iter = LRUlist_.erase(iter);
+        }
+        else {
+            iter++;
+        }
+    }
+    return;
 }
 
 /**
@@ -40,11 +57,29 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
     // Todo:
     //  支持并发锁
     //  选择一个frame取消固定
+    std::scoped_lock lock{latch_};
+
+    // if found, then do nothing; if not found, then add to the back
+    bool found = false;
+    std::list<frame_id_t>::iterator iter;
+    for (iter = LRUlist_.begin(); iter != LRUlist_.end(); iter++) {
+        if (*iter == frame_id) {
+            found = true;
+            break;
+        }
+    }
+    if (found == false) LRUlist_.push_back(frame_id);
+    return;
 }
 
 /** @return replacer中能够victim的数量 */
 size_t LRUReplacer::Size() {
     // Todo:
     // 改写return size
-    return 0;
+    std::scoped_lock lock{latch_};
+
+
+    size_t ret = 0;
+    ret = LRUlist_.size();
+    return ret;
 }
